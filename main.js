@@ -1,31 +1,52 @@
 const glados = async () => {
   const notice = []
-  if (!process.env.GLADOS) return
+  let failed = false
+
+  if (!process.env.GLADOS) {
+    return { notice: ['Checkin Error', 'GLADOS secret is missing'], failed: true }
+  }
+
   for (const cookie of String(process.env.GLADOS).split('\n')) {
     if (!cookie) continue
+
     try {
+      const domain = process.env.DOMAIN || 'glados.cloud'
       const common = {
-        'cookie': cookie,
-        'referer': 'https://glados.cloud/console/checkin',
-        'user-agent': 'Mozilla/4.0 (compatible; MSIE 7.0; Windows NT 6.0)',
+        cookie,
+        referer: `https://${domain}/console/checkin`,
+        'user-agent': 'Mozilla/5.0',
       }
-      const action = await fetch('https://glados.cloud/api/user/checkin', {
+
+      const action = await fetch(`https://${domain}/api/user/checkin`, {
         method: 'POST',
         headers: { ...common, 'content-type': 'application/json' },
-        body: '{"token":"glados.cloud"}',
+        body: JSON.stringify({ token: domain }),
       }).then((r) => r.json())
-      if (action?.code) throw new Error(action?.message)
-      const status = await fetch('https://glados.cloud/api/user/status', {
+
+      const message = String(action?.message || '')
+      const alreadyCheckedIn =
+        /today'?s observation logged|return tomorrow|already checked|已签到|已经签到/i.test(message)
+
+      if (action?.code && !alreadyCheckedIn) {
+        throw new Error(message || `checkin failed with code ${action?.code}`)
+      }
+
+      const status = await fetch(`https://${domain}/api/user/status`, {
         method: 'GET',
-        headers: { ...common },
+        headers: common,
       }).then((r) => r.json())
-      if (status?.code) throw new Error(status?.message)
+
+      if (status?.code) {
+        throw new Error(status?.message || `status failed with code ${status?.code}`)
+      }
+
       notice.push(
         'Checkin OK',
-        `${action?.message}`,
+        message || 'Already checked in',
         `Left Days ${Number(status?.data?.leftDays)}`
       )
     } catch (error) {
+      failed = true
       notice.push(
         'Checkin Error',
         `${error}`,
@@ -33,75 +54,85 @@ const glados = async () => {
       )
     }
   }
-  return notice
+
+  return { notice, failed }
 }
 
 const notify = async (notice) => {
   if (!process.env.NOTIFY || !notice) return
+
   for (const option of String(process.env.NOTIFY).split('\n')) {
     if (!option) continue
-    try {
-      if (option.startsWith('console:')) {
-        for (const line of notice) {
-          console.log(line)
-        }
-      } else if (option.startsWith('wxpusher:')) {
-        await fetch(`https://wxpusher.zjiecode.com/api/send/message`, {
-          method: 'POST',
-          headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({
-            appToken: option.split(':')[1],
-            summary: notice[0],
-            content: notice.join('<br>'),
-            contentType: 3,
-            uids: option.split(':').slice(2),
-          }),
-        })
-      } else if (option.startsWith('pushplus:')) {
-        await fetch(`https://www.pushplus.plus/send`, {
-          method: 'POST',
-          headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({
-            token: option.split(':')[1],
-            title: notice[0],
-            content: notice.join('<br>'),
-            template: 'markdown',
-          }),
-        })
-      } else if (option.startsWith('qyweixin:')) {
-        const qyweixinToken = option.split(':')[1]
-        const qyweixinNotifyRebotUrl = 'https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=' + qyweixinToken;
-        await fetch(qyweixinNotifyRebotUrl, {
+
+    if (option.startsWith('console:')) {
+      for (const line of notice) console.log(line)
+    } else if (option.startsWith('wxpusher:')) {
+      await fetch('https://wxpusher.zjiecode.com/api/send/message', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          appToken: option.split(':')[1],
+          summary: notice[0],
+          content: notice.join('<br>'),
+          contentType: 3,
+          uids: option.split(':').slice(2),
+        }),
+      })
+    } else if (option.startsWith('pushplus:')) {
+      await fetch('https://www.pushplus.plus/send', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          token: option.split(':')[1],
+          title: notice[0],
+          content: notice.join('<br>'),
+          template: 'markdown',
+        }),
+      })
+    } else if (option.startsWith('bark:')) {
+      await fetch(`https://api.day.app/${option.split(':')[1]}`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          title: notice[0],
+          body: notice.slice(1).join('\n'),
+        }),
+      })
+    } else if (option.startsWith('qyweixin:')) {
+      const qyweixinToken = option.split(':')[1]
+      await fetch(
+        'https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=' + qyweixinToken,
+        {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify({
             msgtype: 'markdown',
-            markdown: {
-                content: notice.join('<br>')
-            }
+            markdown: { content: notice.join('<br>') },
           }),
-        })
-      } else {
-        // fallback
-        await fetch(`https://www.pushplus.plus/send`, {
-          method: 'POST',
-          headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({
-            token: option,
-            title: notice[0],
-            content: notice.join('<br>'),
-            template: 'markdown',
-          }),
-        })
-      }
-    } catch (error) {
-      throw error
+        }
+      )
+    } else {
+      await fetch('https://www.pushplus.plus/send', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          token: option,
+          title: notice[0],
+          content: notice.join('<br>'),
+          template: 'markdown',
+        }),
+      })
     }
   }
 }
 
 const main = async () => {
-  await notify(await glados())
+  const { notice, failed } = await glados()
+  await notify(notice)
+
+  for (const line of notice) console.log(line)
+
+  if (failed) process.exitCode = 1
 }
 
 main()
