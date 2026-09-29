@@ -1,6 +1,9 @@
 name: Keep GitHub Actions Active
 
 on:
+  push:
+    paths:
+      - ".github/workflows/keepalive.yml"
   schedule:
     - cron: "0 1 1 * *"
   workflow_dispatch:
