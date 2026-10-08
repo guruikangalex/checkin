@@ -6,15 +6,22 @@ const glados = async () => {
     return { notice: ['Checkin Error', 'GLADOS secret is missing'], failed: true }
   }
 
-  for (const cookie of String(process.env.GLADOS).split('\n')) {
-    if (!cookie) continue
+  // GLaDOS 会校验签到请求 UA 是否与登录时浏览器一致。
+  // 多账号时，GLADOS_UA 可按行与 GLADOS Cookie 一一对应；
+  // 若只提供一行 UA，则所有账号共用该 UA。
+  const agents = String(process.env.GLADOS_UA || '').split('\n').filter(Boolean)
+  const cookies = String(process.env.GLADOS).split('\n').filter(Boolean)
 
+  for (const [index, cookie] of cookies.entries()) {
     try {
       const domain = process.env.DOMAIN || 'glados.cloud'
       const common = {
         cookie,
         referer: `https://${domain}/console/checkin`,
-        'user-agent': 'Mozilla/5.0',
+        'user-agent':
+          agents[index] ||
+          agents[0] ||
+          'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36',
       }
 
       const action = await fetch(`https://${domain}/api/user/checkin`, {
@@ -28,7 +35,11 @@ const glados = async () => {
         /today'?s observation logged|return tomorrow|already checked|已签到|已经签到/i.test(message)
 
       if (action?.code && !alreadyCheckedIn) {
-        throw new Error(message || `checkin failed with code ${action?.code}`)
+        const details = [
+          `code=${action.code}`,
+          action?.reason ? `reason=${action.reason}` : null,
+        ].filter(Boolean).join(', ')
+        throw new Error(`${message || 'checkin failed'} (${details})`)
       }
 
       const status = await fetch(`https://${domain}/api/user/status`, {
@@ -37,7 +48,11 @@ const glados = async () => {
       }).then((r) => r.json())
 
       if (status?.code) {
-        throw new Error(status?.message || `status failed with code ${status?.code}`)
+        const details = [
+          `code=${status.code}`,
+          status?.reason ? `reason=${status.reason}` : null,
+        ].filter(Boolean).join(', ')
+        throw new Error(`${status?.message || 'status failed'} (${details})`)
       }
 
       notice.push(
