@@ -4,6 +4,19 @@
 
 > **项目来源与说明：** 本仓库基于 [integration-intelligent/checkin](https://github.com/integration-intelligent/checkin) 修改，增加了签到错误如实反馈、支持 `GLADOS_UA` 与每月 keepalive。GLaDOS 可能修改接口或限制自动化，不能保证永久有效。使用前请阅读代码，并遵守服务条款。
 
+## 2026-11-10 签到协议与监测修复
+
+GLaDOS 在 2026-11-07 改用 challenge/proof 签到协议。旧脚本仍可能显示 `Checkin OK`，但每次只得到 1 分。本仓库现在先获取服务端 challenge，再按公开前端协议提交 `nonce` 和 SHA-256 `proof`。程序也会查询积分、套餐、连续签到和 IQI（可用时），对“接口成功但积分低于可验证下限”报告错误；不自动兑换积分，也不会绕过额外的 CAPTCHA 验证。
+
+新增独立的 **GLaDOS Protocol Guard**，每日 UTC 15:00（北京时间 23:00）检查前端的 proof 盐、签到端点、关键协议字段和第三方验证变化；如发生重要变化，工作流会失败并在 GitHub Actions 显示。只有在 GitHub 账号开启 Actions 失败通知时才会收到邮件。签到前还会运行一次非阻断式检查，以免监测的暂时性失败造成漏签。
+
+- 签到工作流：`.github/workflows/run.yml`
+- 监测工作流：`.github/workflows/guard.yml`
+- 监测基线：`.github/guard-baseline.json`
+- 原有 `GLADOS`、`GLADOS_UA`、`NOTIFY` 等配置不变。
+
+**验证方法：** 在 Actions 中手动运行 `GLaDOS Protocol Guard` 检查是否 PASS，再查看 `run` 的日志。一天只能获得一次积分；当天已经签到的再次运行不代表新协议已恢复正常积分，需要在下次未签到时核对实际得分。
+
 ## 第 1 步：准备账号
 
 你需要：
@@ -102,7 +115,7 @@ GLaDOS 可能校验签到请求的 User-Agent（UA）。本项目支持 `GLADOS_
 
 ```text
 Checkin OK
-Checkin! Got 10 Points
+Checkin! Got N Points
 Left Days 135
 ```
 
@@ -120,9 +133,9 @@ Checkin Error
 Error: ...
 ```
 
-本项目会将真正的签到错误反映为 GitHub Actions 的失败状态，便于排查。请同时看**日志内容**，不要只看绿色或红色图标。
+本项目会将真正的签到错误和可验证的异常低积分反映为 GitHub Actions 的失败状态，便于排查。请同时看**日志内容**，不要只看绿色或红色图标。
 
-## 第 8 步：确认自动签到与保活设置
+## 第 8 步：确认自动签到、协议监测与保活设置
 
 `run.yml` 中目前安排每天 **UTC 16:10**，即北京时间**次日 00:10**附近执行签到；GitHub 的 scheduled workflow 可能延迟，不保证准点。
 
