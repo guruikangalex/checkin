@@ -33,7 +33,7 @@ GLaDOS 在 2026-11-07 改用 challenge/proof 签到协议。旧脚本仍可能�
 4. 点击 **Create fork**。
 5. 进入你自己的仓库：`https://github.com/你的用户名/checkin`。
 
-Fork 后请确认仓库中存在 `main.js`、`.github/workflows/run.yml` 和 `.github/workflows/keepalive.yml`。如果你已有同一 fork 网络中的仓库，GitHub 可能要求使用已有 fork；请确认你的副本包含这些改动。
+Fork 后请确认仓库中存在 `main.js`、`.github/workflows/run.yml`、`.github/workflows/guard.yml` 和 `.github/workflows/keepalive.yml`。如果你已有同一 fork 网络中的仓库，GitHub 可能要求使用已有 fork；请确认你的副本包含这些改动。
 
 **说明：** Fork 只复制代码，不会复制原仓库的 Cookie 或其他 Actions Secrets；每个人都必须自己配置。GitHub 对新 Fork 的 Actions 也通常默认禁用。
 
@@ -95,11 +95,12 @@ GLaDOS 可能校验签到请求的 User-Agent（UA）。本项目支持 `GLADOS_
 
 1. 打开自己的 fork，点击顶部 **Actions**。
 2. 若看到 **I understand my workflows, go ahead and enable them** 或类似提示，阅读代码后点击启用。
-3. 在左侧找到两个工作流，并确保均已启用：
+3. 在左侧找到三个工作流，并确保均已启用：
 
 | 工作流 | 用途 |
 | --- | --- |
 | `run` | 每天执行签到 |
+| `GLaDOS Protocol Guard` | 每天校验签到协议，发现关键变化时使工作流失败 |
 | `Keep GitHub Actions Active` | 每月提交一次时间戳，降低公开仓库因 60 天无代码活动而自动停用定时任务的风险 |
 
 如果某个工作流页面出现 **Enable workflow**，请点击它。Fork 中的定时工作流可能默认关闭。
@@ -138,6 +139,8 @@ Error: ...
 ## 第 8 步：确认自动签到、协议监测与保活设置
 
 `run.yml` 中目前安排每天 **UTC 16:10**，即北京时间**次日 00:10**附近执行签到；GitHub 的 scheduled workflow 可能延迟，不保证准点。
+
+`guard.yml` 安排每天 **UTC 15:00**（北京时间 23:00）核对前端协议与基线，不需要账号 Cookie。
 
 `keepalive.yml` 安排每月 1 日 **UTC 01:00**（北京时间 09:00 附近）更新 `.github/keepalive.txt` 并由机器人提交一次 commit，以减少长期无仓库活动导致定时 workflow 被禁用的风险。
 
