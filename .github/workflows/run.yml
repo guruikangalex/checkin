@@ -15,6 +15,12 @@ jobs:
         with:
           node-version: 24
       - run: npm ci
+      - name: Validate JavaScript syntax
+        run: node --check main.js && node --check guard.js
+      - name: Check protocol changes (nonblocking)
+        run: node guard.js --soft
+        env:
+          DOMAIN: ${{ vars.DOMAIN || 'glados.cloud' }}
       - run: npm run main
         env:
           GLADOS: ${{ secrets.GLADOS }}

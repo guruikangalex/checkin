@@ -1,0 +1,37 @@
+name: GLaDOS Protocol Guard
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'guard.js'
+      - '.github/guard-baseline.json'
+      - '.github/workflows/guard.yml'
+  schedule:
+    - cron: '0 15 * * *'
+
+concurrency:
+  group: glados-protocol-guard
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  guard:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Validate guard syntax
+        run: node --check guard.js
+      - name: Compare current frontend protocol with tracked baseline
+        run: node guard.js
+        env:
+          DOMAIN: ${{ vars.DOMAIN || 'glados.cloud' }}
+      - name: Explain failure
+        if: failure()
+        run: echo '::error::GLaDOS frontend protocol may have changed; inspect protocol guard logs.'
